@@ -114,7 +114,12 @@ class VvtCompetitionDataset(BaseDataset):
 
     def __getitem__(self, index):
         image = self.get_person_image(index)  # (3, 256, 256)
-        pose_target = self.get_input_person_pose(index, target_width=256)  # (18, 256, 256)
+        try:
+            pose_target = self.get_input_person_pose(index, target_width=256)  # (18, 256, 256)
+        except IndexError as e:
+            print(e.__traceback__)
+            print(f"[WARNING]: no pose found {self.keypoints[index]}")
+            pose_target = torch.zeros(18, 256, 256)
         assert image.shape[-2:] == pose_target.shape[-2:], f"hxw don't match: image {image.shape}, pose {pose_target.shape}"
 
         # random fliping
