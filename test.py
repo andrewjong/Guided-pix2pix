@@ -41,7 +41,8 @@ if __name__ == '__main__':
             out_path = osp.sep.join(input_path.split(osp.sep)[-2:])[:-15] # remove _keypoints.json
         else:
             out_path = str(i)
-        pbar.set_description(out_path)
+        if i % 5 == 0:
+            pbar.set_description(out_path)
         # process
         input = data['A']
         target = data['B']
