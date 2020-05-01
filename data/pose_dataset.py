@@ -1,4 +1,5 @@
 import os.path
+from glob import glob
 import torchvision.transforms as transforms
 import torch
 from data.base_dataset import BaseDataset
@@ -19,6 +20,7 @@ class PoseDataset(BaseDataset):
             phase = 'test'
         self.root = os.path.join(self.opt.dataroot, phase)
         self.transform=transforms.Compose([transforms.ToTensor()])
+        self.pkl_files = glob(f"{self.root}/*.pkl")
 
     def randomFlip(self, x, x_target, pose, pose_target, mask, mask_target):
         # random horizontal flip
@@ -33,9 +35,10 @@ class PoseDataset(BaseDataset):
         return x, x_target, pose, pose_target, mask, mask_target
 
     def __getitem__(self, index):
-        path = os.path.join(self.root,'%d.pkl'%index)
+        # path = os.path.join(self.root,'%d.pkl'%index)
+        path = self.pkl_files[index]
         pickle_in = open(path,"rb")
-        sample = pickle.load(pickle_in)
+        sample = pickle.load(pickle_in, encoding="latin1")
         
         x = sample['x']                     #(256, 256, 3)
         x_target = sample['x_target']       #(256, 256, 3)
@@ -68,7 +71,7 @@ class PoseDataset(BaseDataset):
         if (self.opt.isTrain):
             return 73340
         else:
-            return 12800
+            return min(12800, len(self.pkl_files))
 
     def name(self):
         return 'PoseDataset'

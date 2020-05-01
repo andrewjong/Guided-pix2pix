@@ -1,4 +1,6 @@
 import os
+import os.path as osp
+from tqdm import tqdm
 from options.test_options import TestOptions
 from data import CreateDataLoader
 from models import create_model
@@ -29,12 +31,18 @@ if __name__ == '__main__':
     output_list = []
     target_list = []
 
-    for i, data in enumerate(dataset):
+    pbar = tqdm(enumerate(dataset), total=len(dataset))
+    for i, data in pbar:
         if i >= opt.num_test:
             break
-        
+
+        if "guide_path" in data:
+            input_path = data["guide_path"][0] # take out the batch
+            out_path = osp.sep.join(input_path.split(osp.sep)[-2:])[:-15] # remove _keypoints.json
+        else:
+            out_path = str(i)
+        pbar.set_description(out_path)
         # process
-        print('processing (%d/%d)-th image...' % (i+1, dataset_size))
         input = data['A']
         target = data['B']
         guide = data['guide']
@@ -43,6 +51,6 @@ if __name__ == '__main__':
         output = model.get_output()
 
 		# save results
-        util.save(input, guide, target, output, results_path, i+1, opt)
+        util.save(input, guide, target, output, results_path, out_path, opt)
     print ('Results saved in %s'%results_path)
     

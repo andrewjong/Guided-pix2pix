@@ -19,8 +19,7 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 def find_classes(directory):
-    classes = [d for d in os.listdir(directory) if osp.isdir(os.path.join(directory, d))]
-    classes.sort()
+    classes = sorted([d for d in os.listdir(directory) if osp.isdir(os.path.join(directory, d))])
     class_to_idx = {classes[i]: i for i in range(len(classes))}
     return classes, class_to_idx
 

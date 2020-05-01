@@ -1,4 +1,5 @@
 import torch.nn.functional as F
+from skimage import draw
 import json
 import os.path
 from glob import glob
@@ -28,7 +29,7 @@ class VvtCompetitionDataset(BaseDataset):
         return parser
 
     def initialize(self, opt):
-        self.radius = 4
+        self.radius = 4.5
         self.opt = opt
         self.root = opt.dataroot
         self._clothes_person_dir = osp.join(self.root, "lip_clothes_person")
@@ -44,9 +45,9 @@ class VvtCompetitionDataset(BaseDataset):
             self._keypoints_dir = osp.join(self.root, "lip_test_frames_keypoint")
 
         self.keypoints = glob(f"{self._keypoints_dir}/**/*.json")
-        assert len(self.keypoints > 0)
+        assert len(self.keypoints) > 0
 
-        self.transform = transforms.Compose([transforms.ToTensor()])
+        self.to_tensor = transforms.Compose([transforms.ToTensor()])
 
     def randomFlip(self, x, x_target, pose, pose_target, mask, mask_target):
         # random horizontal flip
@@ -66,51 +67,55 @@ class VvtCompetitionDataset(BaseDataset):
         """
         # load pose points
         _pose_name = self.keypoints[index]
-        with open(osp.join(self.data_path, 'pose', _pose_name), 'r') as f:
+        with open(_pose_name, 'r') as f:
             pose_label = json.load(f)
             pose_data = pose_label['people'][0]['pose_keypoints']
             pose_data = np.array(pose_data)
             pose_data = pose_data.reshape((-1, 3))
 
         point_num = pose_data.shape[0]  # how many pose joints
-        assert len(point_num) == 18, "should be 18 pose joints for guidedpix2pix"
-        # construct an N-channel map tensor
-        pose_map = torch.zeros(point_num, self.img_h, self.img_w)
-        pose_map -= 1  # set -1 everywhere
-
-        r = self.radius
+        assert point_num == 18, "should be 18 pose joints for guidedpix2pix"
+        # construct an N-channel map tensor with -1
+        pose_map = torch.zeros(point_num, self.img_h, self.img_w) - 1
 
         # draw a circle around the joint on the appropriate channel
         for i in range(point_num):
-            one_map = Image.new('L', (self.fine_width, self.fine_height))
-            one_map_tensor = self.to_tensor_and_norm(one_map)
-            pose_map[i] = one_map_tensor[0]
-
-            draw = ImageDraw.Draw(one_map)
             pointx = pose_data[i, 0]
             pointy = pose_data[i, 1]
             if pointx > 1 and pointy > 1:
-                draw.ellipse((pointx - r, pointy - r, pointx + r, pointy + r), 1, 1)
+                rr, cc = draw.circle(pointy, pointx, self.radius, shape=(self.img_h, self.img_w))
+                pose_map[i, rr, cc] = 1
+                # assert torch.any(pose_map[i] == 1), "drew but did not find 1s"
 
         # add padding to the w/ h/
         pad = (target_width - self.img_w)//2
-        F.pad(pose_map, (pad, pad))  # make the image 256x256
+        pose_map = F.pad(pose_map, (pad, pad), value=-1)  # make the image 256x256
+        assert all(i == -1 or i == 1 for i in torch.unique(pose_map)), f"{torch.unique(pose_map)}"
         return pose_map
 
-    def get_person_image(self, index):
+    def _get_person_image_path_from_index(self, index):
         pose_name = self.keypoints[index]
-        person_id = osp.split(pose_name)[-2]
+        person_id = pose_name.split("/")[-2]
         folder = osp.join(self._clothes_person_dir, person_id)
 
-        person_image_path = os.listdir(folder)[-1] # TODO: verify my index
-        assert person_image_path.endswith(".png"), f"person images should have .png extensions: {person_image_path}"
-        person_image = Image.open(person_image_path)
-        return person_image
+        files = os.listdir(folder)
+        person_image_name = [f for f in files if f.endswith(".png")][0]
+        assert person_image_name.endswith(".png"), f"person images should have .png extensions: {person_image_name}"
+        return osp.join(folder, person_image_name)
+
+    def get_person_image(self, index):
+        pers_image_path = self._get_person_image_path_from_index(index)
+        person_image = Image.open(pers_image_path)
+        person_tensor = self.to_tensor(person_image)
+        pad = (256 - 192) // 2
+        person_tensor = F.pad(person_tensor, (pad, pad))
+        return person_tensor
 
 
     def __getitem__(self, index):
-        image = self.get_person_image(index)  # (256, 256, 3)
-        pose_target = self.get_input_person_pose(index, target_width=256)  # (256, 256, 18)
+        image = self.get_person_image(index)  # (3, 256, 256)
+        pose_target = self.get_input_person_pose(index, target_width=256)  # (18, 256, 256)
+        assert image.shape[-2:] == pose_target.shape[-2:], f"hxw don't match: image {image.shape}, pose {pose_target.shape}"
 
         # random fliping
         # if (self.opt.isTrain):
@@ -121,16 +126,12 @@ class VvtCompetitionDataset(BaseDataset):
         #                                                                         mask,
         #                                                                         mask_target)
 
-        # to tensor
-        image = self.transform(image)  # ranges from [0, 255]
-        pose_target = self.transform(pose_target)
-
         # input-guide-target
         input = (image / 255) * 2 - 1
         guide = pose_target
         # target = (x_target / 255) * 2 - 1
         # Put data into [input, guide, target]
-        return {'A': input, 'guide': guide, 'B': None}
+        return {'A': input, "guide_path": self.keypoints[index], 'guide': guide, 'B': torch.zeros(3, 256, 256)}
 
     def __len__(self):
         return len(self.keypoints)
