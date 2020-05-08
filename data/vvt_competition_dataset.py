@@ -34,8 +34,8 @@ class VvtCompetitionDataset(BaseDataset):
         self.root = opt.dataroot
         self._clothes_person_dir = osp.join(self.root, "lip_clothes_person")
 
-        self.img_h = 256
-        self.img_w = 192
+        self.img_h = opt.img_h
+        self.img_w = opt.img_w
 
         if opt.isTrain:
             self._keypoints_dir = osp.join(self.root, "lip_train_frames_keypoint")
@@ -66,7 +66,7 @@ class VvtCompetitionDataset(BaseDataset):
     def get_target_frame(self, index):
         """ Gets the target frame that corresponds to the keypoint at this index """
         _pose_name = self.keypoints[index]
-        _pose_name.replace("_keypoints.json", ".png")
+        _pose_name = _pose_name.replace("_keypoints.json", ".png")
         just_folder_and_file = _pose_name.split("/")[-2:]
         frame_path = osp.join(self._frames_dir, *just_folder_and_file)
         frame = self.to_tensor(Image.open(frame_path))
@@ -114,7 +114,9 @@ class VvtCompetitionDataset(BaseDataset):
         assert person_image_name.endswith(".png"), f"person images should have .png extensions: {person_image_name}"
         return osp.join(folder, person_image_name)
 
-    def _pad_width_up(self, tensor, value=0, original=192, new=256):
+    def _pad_width_up(self, tensor, value=0):
+        original = self.img_w
+        new = self.img_h
         if original > new:
             raise ValueError("This function can only pad up if the original size is smaller than the new size")
         pad = (new - original) // 2

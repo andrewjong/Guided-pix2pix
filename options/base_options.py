@@ -43,7 +43,10 @@ class BaseOptions():
         parser.add_argument('--patch_size_min', default=20, type=int, help='minumum texture patch size')
         parser.add_argument('--patch_size_max', default=40, type=int, help='max texture patch size')
         parser.add_argument('--num_input_texture_patch', default=1, type=int)
-        
+
+        parser.add_argument("--img_w", default=192, type=int)
+        parser.add_argument("--img_h", default=256, type=int)
+
         self.initialized = True
         return parser
 

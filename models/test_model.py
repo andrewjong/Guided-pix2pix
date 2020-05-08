@@ -44,5 +44,10 @@ class TestModel(BaseModel):
         self.fake_B = self.netG(self.real_A, self.guide)
 
     def get_output(self):
-        return self.fake_B
+        pad = (self.opt.img_h - self.opt.img_w) // 2
+        cropped_back = self.fake_B[:, :, :, pad:pad+self.opt.img_w].clone()  # crop the output to match what it originally was
+        assert cropped_back.shape[-2] == self.opt.img_h
+        assert cropped_back.shape[-1] == self.opt.img_w
+        return cropped_back
+        # return self.fake_B
 
